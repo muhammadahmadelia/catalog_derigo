@@ -1,5 +1,4 @@
 import os
-import re
 import sys
 import json
 from time import sleep
@@ -29,29 +28,6 @@ from webdriver_manager.chrome import ChromeDriverManager
 import warnings
 warnings.filterwarnings("ignore")
 
-import re
-import json
-import threading
-import requests
-from lxml import html
-from datetime import datetime
-
-from time import sleep
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.chrome.options import Options
-
-
-from models.store import Store
-# from models.brand import Brand
-from models.product import Product
-from models.metafields import Metafields
-from models.variant import Variant
-
-from selenium.webdriver.chrome.service import Service as ChromeService
-# from webdriver_manager.chrome import ChromeDriverManager
 
 class myScrapingThread(threading.Thread):
     def __init__(self, threadID: int, name: str, obj, brand_name: str, brand_url: str, glasses_type: str, product_url: str, product_number: str) -> None:
@@ -623,11 +599,11 @@ def read_data_from_json_file(DEBUG, result_filename: str):
                     listing_price = str(json_variant['listing_price']).strip()
                     barcode_or_gtin = str(json_variant['barcode_or_gtin']).strip()
                     image_filname = f'Images/{sku}.jpg'
-                    # if not os.path.exists(image_filname):
-                    #     image_attachment = download_image(img_url)
-                    #     if image_attachment:
-                    #         with open(f'Images/{sku}.jpg', 'wb') as f: f.write(image_attachment)
-                    #         crop_downloaded_image(f'Images/{sku}.jpg')
+                    if not os.path.exists(image_filname):
+                        image_attachment = download_image(img_url)
+                        if image_attachment:
+                            with open(f'Images/{sku}.jpg', 'wb') as f: f.write(image_attachment)
+                            crop_downloaded_image(f'Images/{sku}.jpg')
 
                     data.append([brand, number, frame_code, frame_color, lens_color,  sku, wholesale_price, listing_price, barcode_or_gtin])
     except Exception as e:
@@ -776,11 +752,11 @@ try:
             chrome_path = str(chrome_path).split('/')[0].strip()
             chrome_path = f'{chrome_path}\\chromedriver.exe'
     
-    # DeRigo_Scraper(DEBUG, result_filename, logs_filename, chrome_path).controller(store, brands)
+    DeRigo_Scraper(DEBUG, result_filename, logs_filename, chrome_path).controller(store, brands)
     
-    # for filename in glob.glob('Images/*'): os.remove(filename)
+    for filename in glob.glob('Images/*'): os.remove(filename)
     data = read_data_from_json_file(DEBUG, result_filename)
-    # os.remove(result_filename)
+    os.remove(result_filename)
 
     saving_picture_in_excel(data)
 except Exception as e:
