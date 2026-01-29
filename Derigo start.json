@@ -1,0 +1,9 @@
+{
+    "brands": [
+        {
+            "brand": "Police",
+            "code": "01",
+            "glasses_type": ["Sunglasses", "Eyeglasses"]
+        }
+    ]
+}
