@@ -1,4 +1,5 @@
 import os
+import random
 import sys
 import json
 from time import sleep
@@ -67,6 +68,7 @@ class DeRigo_Scraper:
         # self.browser = webdriver.Chrome(options=self.chrome_options, service_args=self.args)
         # self.browser = webdriver.Chrome(options=self.chrome_options)
         self.browser = webdriver.Chrome(service=ChromeService(chrome_path), options=self.chrome_options)
+        self.cookies = {}
         pass
 
     def controller(self, store: Store, brands_with_types: list[dict]) -> None:
@@ -131,14 +133,22 @@ class DeRigo_Scraper:
 
             else: print(f'Failed to login \nURL: {store.link}\nUsername: {str(store.username)}\nPassword: {str(store.password)}')
             # input('wait')
+            self.cookies = self.get_cookies()
         except Exception as e:
             self.print_logs(f'Exception in DeRigo_Scraper controller: {e}')
             if self.DEBUG: print(f'Exception in DeRigo_Scraper controller: {e}')
         finally: 
             # self.wait_for_thread_list_to_complete()
             self.save_to_json(self.data)
+            return self.cookies
+        
+    def quit_browser(self) -> None:
+        try:
             self.browser.quit()
-
+        except Exception as e:
+            self.print_logs(f'Exception in quit_browser: {str(e)}')
+            if self.DEBUG: print(f'Exception in quit_browser: {str(e)}')
+            else: pass
     def open_new_tab(self, url: str) -> None:
         # open category in new tab
         self.browser.execute_script('window.open("'+str(url)+'","_blank");')
@@ -456,7 +466,7 @@ class DeRigo_Scraper:
                         prices = response.json()
                         break
                     else: self.print_logs(f'{response} for getting variant price from {product_url} with index {index}')
-                except requests.exceptions.Timeout: sleep(1)
+                except Exception: sleep(1)
         except Exception as e:
             if self.DEBUG: print(f'Exception in get_variant_price: {e}')
             self.print_logs(f'Exception in get_variant_price: {e}')
@@ -572,7 +582,7 @@ class DeRigo_Scraper:
             print()
 
 
-def read_data_from_json_file(DEBUG, result_filename: str):
+def read_data_from_json_file(DEBUG, result_filename: str, cookies: dict) -> list[list]:
     data = []
     try:
         files = glob.glob(result_filename)
@@ -582,6 +592,7 @@ def read_data_from_json_file(DEBUG, result_filename: str):
             products = []
 
             for json_d in json_data:
+                # sleep(random.uniform(1.2, 5.2))
                 number, frame_code, brand, img_url, frame_color, lens_color = '', '', '', '', '', ''
                 brand = json_d['brand']
                 number = str(json_d['name']).strip().upper()
@@ -590,6 +601,7 @@ def read_data_from_json_file(DEBUG, result_filename: str):
                 frame_color = str(json_d.get('metafields', {}).get('frame_color', '')).strip().title()
                 lens_color = str(json_d.get('metafields', {}).get('lens_color', '')).strip().title()
                 img_url = str(json_d.get('image', '')).strip()
+                image_attachment = download_image(img_url, cookies)
 
                 for json_variant in json_d['variants']:
                     sku, price = '', ''
@@ -600,10 +612,9 @@ def read_data_from_json_file(DEBUG, result_filename: str):
                     barcode_or_gtin = str(json_variant['barcode_or_gtin']).strip()
                     image_filname = f'Images/{sku}.jpg'
                     if not os.path.exists(image_filname):
-                        image_attachment = download_image(img_url)
                         if image_attachment:
                             with open(f'Images/{sku}.jpg', 'wb') as f: f.write(image_attachment)
-                            crop_downloaded_image(f'Images/{sku}.jpg')
+                            # crop_downloaded_image(f'Images/{sku}.jpg')
 
                     data.append([brand, number, frame_code, frame_color, lens_color,  sku, wholesale_price, listing_price, barcode_or_gtin])
     except Exception as e:
@@ -611,34 +622,40 @@ def read_data_from_json_file(DEBUG, result_filename: str):
         else: pass
     finally: return data
 
-def download_image(url):
+def download_image(url: str, cookies: dict):
     image_attachment = ''
     try:
         headers = {
-            'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9',
-            'accept-Encoding': 'gzip, deflate, br',
-            'accept-Language': 'en-US,en;q=0.9',
-            'cache-Control': 'max-age=0',
-            'sec-ch-ua': '"Google Chrome";v="95", "Chromium";v="95", ";Not A Brand";v="99"',
+            'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+            'accept-language': 'en-US,en;q=0.9',
+            'cache-control': 'max-age=0',
+            'priority': 'u=0, i',
+            'sec-ch-ua': '"Not(A:Brand";v="8", "Chromium";v="144", "Google Chrome";v="144"',
             'sec-ch-ua-mobile': '?0',
             'sec-ch-ua-platform': '"Windows"',
             'sec-fetch-dest': 'document',
             'sec-fetch-mode': 'navigate',
             'sec-fetch-site': 'none',
-            'Sec-Fetch-User': '?1',
+            'sec-fetch-user': '?1',
             'upgrade-insecure-requests': '1',
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/144.0.0.0 Safari/537.36',
         }
         counter = 0
         while True:
             try:
-                response = requests.get(url=url, headers=headers, timeout=20)
-                # print(response.status_code)
-                if response.status_code == 200:
-                    # image_attachment = base64.b64encode(response.content)
+                response = requests.get(
+                    url=url, 
+                    headers=headers,
+                    cookies=cookies, 
+                    timeout=20
+                    )
+                if response.status_code == 200 and '<html' not in response.text :
                     image_attachment = response.content
                     break
-                else: print(f'{response.status_code} found for downloading image')
-            except: sleep(0.3)
+                else: print(f'Try: {counter + 1} - Unbale to download image {url}')
+            except Exception as e:
+                print(e) 
+                sleep(0.3)
             counter += 1
             if counter == 10: break
     except Exception as e: print(f'Exception in download_image: {str(e)}')
@@ -752,13 +769,15 @@ try:
             chrome_path = str(chrome_path).split('/')[0].strip()
             chrome_path = f'{chrome_path}\\chromedriver.exe'
     
-    DeRigo_Scraper(DEBUG, result_filename, logs_filename, chrome_path).controller(store, brands)
+    obj = DeRigo_Scraper(DEBUG, result_filename, logs_filename, chrome_path)
+    cookies = obj.controller(store, brands)
     
     for filename in glob.glob('Images/*'): os.remove(filename)
-    data = read_data_from_json_file(DEBUG, result_filename)
+    data = read_data_from_json_file(DEBUG, result_filename, cookies)
     os.remove(result_filename)
-
     saving_picture_in_excel(data)
+
+    obj.quit_browser()
 except Exception as e:
     if DEBUG: print('Exception: '+str(e))
     else: pass
