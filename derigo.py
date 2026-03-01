@@ -582,7 +582,14 @@ class DeRigo_Scraper:
             print()
 
 
-def read_data_from_json_file(DEBUG, result_filename: str, cookies: dict) -> list[list]:
+# print logs to the log file
+def print_logs(logs_filename: str, log: str) -> None:
+    try:
+        with open(logs_filename, 'a') as f:
+            f.write(f'\n{log}')
+    except: pass
+
+def read_data_from_json_file(DEBUG, result_filename: str, cookies: dict, logs_filename: str) -> list[list]:
     data = []
     try:
         files = glob.glob(result_filename)
@@ -601,7 +608,8 @@ def read_data_from_json_file(DEBUG, result_filename: str, cookies: dict) -> list
                 frame_color = str(json_d.get('metafields', {}).get('frame_color', '')).strip().title()
                 lens_color = str(json_d.get('metafields', {}).get('lens_color', '')).strip().title()
                 img_url = str(json_d.get('image', '')).strip()
-                image_attachment = download_image(img_url, cookies)
+                glasses_type = str(json_d['type']).strip().title()
+                image_attachment = download_image(img_url, cookies, logs_filename)
 
                 for json_variant in json_d['variants']:
                     sku, price = '', ''
@@ -616,13 +624,13 @@ def read_data_from_json_file(DEBUG, result_filename: str, cookies: dict) -> list
                             with open(f'Images/{sku}.jpg', 'wb') as f: f.write(image_attachment)
                             # crop_downloaded_image(f'Images/{sku}.jpg')
 
-                    data.append([brand, number, frame_code, frame_color, lens_color,  sku, wholesale_price, listing_price, barcode_or_gtin])
+                    data.append([brand, number, frame_code, frame_color, lens_color, glasses_type, sku, wholesale_price, listing_price, barcode_or_gtin])
     except Exception as e:
         if DEBUG: print(f'Exception in read_data_from_json_file: {e}')
-        else: pass
+        print_logs(logs_filename, f'Exception in read_data_from_json_file: {e}')
     finally: return data
 
-def download_image(url: str, cookies: dict):
+def download_image(url: str, cookies: dict, logs_filename: str):
     image_attachment = ''
     try:
         headers = {
@@ -652,13 +660,13 @@ def download_image(url: str, cookies: dict):
                 if response.status_code == 200 and '<html' not in response.text :
                     image_attachment = response.content
                     break
-                else: print(f'Try: {counter + 1} - Unbale to download image {url}')
+                else: print_logs(logs_filename, f'Try: {counter + 1} - Unbale to download image {url}')
             except Exception as e:
-                print(e) 
+                print_logs(logs_filename, f'Exception in download_image: {e}')
                 sleep(0.3)
             counter += 1
             if counter == 10: break
-    except Exception as e: print(f'Exception in download_image: {str(e)}')
+    except Exception as e: print_logs(logs_filename, f'Exception in download_image: {str(e)}')
     finally: return image_attachment
 
 def crop_downloaded_image(filename):
@@ -683,7 +691,7 @@ def crop_downloaded_image(filename):
             im.save(filename)
     except Exception as e: print(f'Exception in crop_downloaded_image: {e}')
 
-def saving_picture_in_excel(data: list):
+def saving_picture_in_excel(data: list, logs_filename: str) -> None:
     workbook = Workbook()
     worksheet = workbook.active
 
@@ -692,11 +700,12 @@ def saving_picture_in_excel(data: list):
     worksheet.cell(row=1, column=3, value='Lens Code')
     worksheet.cell(row=1, column=4, value='Color Frame')
     worksheet.cell(row=1, column=5, value='Color Lens')
-    worksheet.cell(row=1, column=6, value='SKU')
-    worksheet.cell(row=1, column=7, value='Wholesale Price')
-    worksheet.cell(row=1, column=8, value='Listing Price')
-    worksheet.cell(row=1, column=9, value="UPC")
-    worksheet.cell(row=1, column=10, value="Image")
+    worksheet.cell(row=1, column=6, value='Glasses Type')
+    worksheet.cell(row=1, column=7, value='SKU')
+    worksheet.cell(row=1, column=8, value='Wholesale Price')
+    worksheet.cell(row=1, column=9, value='Listing Price')
+    worksheet.cell(row=1, column=10, value="UPC")
+    worksheet.cell(row=1, column=11, value="Image")
 
     for index, d in enumerate(data):
         new_index = index + 2
@@ -710,13 +719,14 @@ def saving_picture_in_excel(data: list):
         worksheet.cell(row=new_index, column=7, value=d[6])
         worksheet.cell(row=new_index, column=8, value=d[7])
         worksheet.cell(row=new_index, column=9, value=d[8])
+        worksheet.cell(row=new_index, column=10, value=d[9])
 
         image = f'Images/{d[-4]}.jpg'
         if os.path.exists(image):
             im = Image.open(image)
             width, height = im.size
             worksheet.row_dimensions[new_index].height = height
-            worksheet.add_image(Imag(image), anchor='J'+str(new_index))
+            worksheet.add_image(Imag(image), anchor='K'+str(new_index))
             # col_letter = get_column_letter(7)
             # worksheet.column_dimensions[col_letter].width = width
 
@@ -773,11 +783,11 @@ try:
     cookies = obj.controller(store, brands)
     
     for filename in glob.glob('Images/*'): os.remove(filename)
-    data = read_data_from_json_file(DEBUG, result_filename, cookies)
+    data = read_data_from_json_file(DEBUG, result_filename, cookies, logs_filename)
     os.remove(result_filename)
-    saving_picture_in_excel(data)
+    saving_picture_in_excel(data, logs_filename)
 
     obj.quit_browser()
 except Exception as e:
     if DEBUG: print('Exception: '+str(e))
-    else: pass
+    print_logs(logs_filename, f'Exception in main: {str(e)}')
